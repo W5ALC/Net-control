@@ -1423,16 +1423,16 @@ class NetControlWindow(QWidget):
     Tonight's Topic:\n\n\t{'\n\t'.join(selected_topics)}
 
     SHORTTIMERS CHECK IN FIRST.
-        • No-Traffic Check-ins - Make sure to acknowledge check-ins
-        • Repeater Owners and System Operators - Make sure to acknowledge check-ins
-        • Digital Check-ins - Make sure to acknowledge check-ins
-        • Analog Check-ins - Make sure to acknowledge check-ins
+        No-Traffic Check-ins - Make sure to acknowledge check-ins
+        Repeater Owners and System Operators - Make sure to acknowledge check-ins
+        Digital Check-ins - Make sure to acknowledge check-ins
+        Analog Check-ins - Make sure to acknowledge check-ins
 
     {open_floor_text}
 
     When all have been called:
-        • Did we miss anyone?
-        • Last call"""
+        Did we miss anyone?
+        Last call"""
 
         closing_text = f"""    This has been the {club_name} {day} Night {net_name}. With that, this is {name}, {callsign} from {location} wrapping up tonight's net and returning all systems to normal amateur use. 73' and have a great night, we will look for you next week!"""
 
