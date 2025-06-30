@@ -1420,7 +1420,7 @@ class NetControlWindow(QWidget):
     PLEASE LISTEN CAREFULLY TO THESE CHECK-IN INSTRUCTIONS:
         WHEN CHECKING IN SAY ONLY YOUR CALLSIGN PHONETICALLY TWICE. Please to facilitate the system keying up allow a key up time of 1.5 seconds, and hold the PTT a half second or so at the last syllable so that you don't get cut off. If Net control misses you then please stand by for the next round of check-ins.
 
-    Tonight's Topic:\n\n\t{'\n\t'.join(selected_topics)}
+    Tonight's Topic:\n\n\t{''.join(selected_topics)}
 
     SHORTTIMERS CHECK IN FIRST.
         No-Traffic Check-ins - Make sure to acknowledge check-ins
