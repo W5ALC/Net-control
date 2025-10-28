@@ -157,6 +157,26 @@ jobs:
         Copy-Item build\ARCNetScript.exe deploy\
         & "$env:Qt6_DIR\bin\windeployqt.exe" --release --no-translations --no-system-d3d-compiler --no-opengl-sw deploy\ARCNetScript.exe
         
+        # Copy Visual C++ Runtime DLLs
+        $vcRedistPath = "C:\Windows\System32"
+        $requiredDlls = @(
+          "msvcp140.dll",
+          "msvcp140_1.dll",
+          "msvcp140_2.dll",
+          "vcruntime140.dll",
+          "vcruntime140_1.dll"
+        )
+        
+        foreach ($dll in $requiredDlls) {
+          $sourcePath = Join-Path $vcRedistPath $dll
+          if (Test-Path $sourcePath) {
+            Copy-Item $sourcePath deploy\
+            Write-Host "Copied $dll"
+          } else {
+            Write-Host "Warning: $dll not found at $sourcePath"
+          }
+        }
+        
     - name: Create installer with NSIS
       shell: pwsh
       run: |
@@ -169,10 +189,12 @@ jobs:
         # Create a simple NSIS script
         $nsisScript = @"
         !include "MUI2.nsh"
+        !include "LogicLib.nsh"
         
         Name "ARC Net Script Generator"
         OutFile "ARCNetScript-${version}-Setup.exe"
         InstallDir "`$PROGRAMFILES64\ARCNetScript"
+        RequestExecutionLevel admin
         
         !define MUI_ABORTWARNING
         !insertmacro MUI_PAGE_DIRECTORY
@@ -182,18 +204,35 @@ jobs:
         Section "Install"
           SetOutPath "`$INSTDIR"
           File /r "deploy\*.*"
+          
+          # Create shortcuts
           CreateShortcut "`$DESKTOP\ARC Net Script.lnk" "`$INSTDIR\ARCNetScript.exe"
           CreateDirectory "`$SMPROGRAMS\ARCNetScript"
           CreateShortcut "`$SMPROGRAMS\ARCNetScript\ARC Net Script.lnk" "`$INSTDIR\ARCNetScript.exe"
+          CreateShortcut "`$SMPROGRAMS\ARCNetScript\Uninstall.lnk" "`$INSTDIR\Uninstall.exe"
+          
+          # Write uninstaller
           WriteUninstaller "`$INSTDIR\Uninstall.exe"
+          
+          # Write registry for Add/Remove Programs
+          WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ARCNetScript" "DisplayName" "ARC Net Script Generator"
+          WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ARCNetScript" "UninstallString" "`$INSTDIR\Uninstall.exe"
+          WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ARCNetScript" "Publisher" "W5ALC"
+          WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ARCNetScript" "DisplayVersion" "${version}"
         SectionEnd
         
         Section "Uninstall"
+          # Remove files
           Delete "`$INSTDIR\*.*"
           RMDir /r "`$INSTDIR"
+          
+          # Remove shortcuts
           Delete "`$DESKTOP\ARC Net Script.lnk"
           Delete "`$SMPROGRAMS\ARCNetScript\*.*"
           RMDir "`$SMPROGRAMS\ARCNetScript"
+          
+          # Remove registry keys
+          DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\ARCNetScript"
         SectionEnd
         "@
         
@@ -229,7 +268,7 @@ jobs:
   create-release:
     needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     permissions:
       contents: write
     
@@ -247,6 +286,7 @@ jobs:
       
     - name: Create Release
       uses: softprops/action-gh-release@v2
+      if: startsWith(github.ref, 'refs/tags/v')
       with:
         files: |
           artifacts/linux-build/ARCNetScript-*-Linux-x86_64.AppImage
@@ -265,8 +305,8 @@ jobs:
           - **Portable tar.gz**: Extract and run
           
           ### Windows
-          - **Setup.exe**: Installer with shortcuts
-          - **Portable ZIP**: Extract and run, no installation needed
+          - **Setup.exe**: Installer with shortcuts (includes all required runtime libraries)
+          - **Portable ZIP**: Extract and run, no installation needed (includes all required runtime libraries)
           
           ## Installation
           
@@ -277,6 +317,8 @@ jobs:
           ```
           
           ### Windows
-          Run the setup executable or extract the portable ZIP.
+          Run the setup executable or extract the portable ZIP. All required Visual C++ runtime libraries are included.
+          
+          **Note**: If you still encounter missing DLL errors, please install the [Microsoft Visual C++ Redistributable](https://aka.ms/vs/17/release/vc_redist.x64.exe).
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
