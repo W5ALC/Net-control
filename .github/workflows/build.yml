@@ -1,4 +1,4 @@
-name: Build with CMake
+name: Build Qt Application
 
 on:
   push:
@@ -11,7 +11,7 @@ on:
 
 jobs:
   build-linux:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
     
     steps:
     - name: Checkout code
@@ -24,79 +24,76 @@ jobs:
         host: 'linux'
         target: 'desktop'
         arch: 'gcc_64'
+        cache: true
         
-    - name: Install build dependencies
+    - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake build-essential libgl1-mesa-dev
+        sudo apt-get install -y build-essential libgl1-mesa-dev libxkbcommon-x11-0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-render-util0 libxcb-xinerama0 libxcb-cursor0
         
-    - name: Configure CMake
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+    - name: Create build directory
+      run: mkdir build
+      
+    - name: Configure with qmake
+      working-directory: build
+      run: qmake ../net-script.pro
       
     - name: Build
-      run: cmake --build build --config Release -j$(nproc)
+      working-directory: build
+      run: make -j$(nproc)
       
-    - name: Create AppDir structure
+    - name: Prepare AppImage
       run: |
-        mkdir -p AppDir/usr/bin
-        mkdir -p AppDir/usr/share/applications
-        mkdir -p AppDir/usr/share/icons/hicolor/256x256/apps
+        mkdir -p appdir/usr/bin
+        mkdir -p appdir/usr/share/applications
+        mkdir -p appdir/usr/share/icons/hicolor/256x256/apps
         
-        cp build/ARCNetScript AppDir/usr/bin/
+        cp build/net-script appdir/usr/bin/
         
-        cat > AppDir/usr/share/applications/arcnetscript.desktop << EOF
+        # Create desktop file
+        cat > appdir/usr/share/applications/net-script.desktop << EOF
         [Desktop Entry]
         Type=Application
-        Name=ARC Net Script
-        Exec=ARCNetScript
-        Icon=arcnetscript
+        Name=Amateur Radio Net Script
+        Exec=net-script
+        Icon=net-script
         Categories=Utility;HamRadio;
-        Terminal=false
         EOF
         
-        # Create a simple icon if none exists
-        if [ ! -f icon.png ]; then
-          convert -size 256x256 xc:blue -pointsize 72 -fill white -gravity center -annotate +0+0 "ARC" icon.png || true
+        # Copy icon if it exists, otherwise create a placeholder
+        if [ -f icon.png ]; then
+          cp icon.png appdir/usr/share/icons/hicolor/256x256/apps/net-script.png
         fi
-        [ -f icon.png ] && cp icon.png AppDir/usr/share/icons/hicolor/256x256/apps/arcnetscript.png || true
         
-    - name: Create AppImage
+    - name: Download linuxdeploy and create AppImage
       run: |
-        wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
-        wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+        wget https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+        wget https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
         chmod +x linuxdeploy*.AppImage
         
         export QMAKE=$Qt6_DIR/bin/qmake
         export LD_LIBRARY_PATH=$Qt6_DIR/lib:$LD_LIBRARY_PATH
         
-        ./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt --output appimage || true
+        ./linuxdeploy-x86_64.AppImage --appdir appdir --plugin qt --output appimage
         
-        # Rename the AppImage
-        [ -f ARC*.AppImage ] && mv ARC*.AppImage ARCNetScript-Linux-x86_64.AppImage || true
-        [ -f *.AppImage ] && mv *.AppImage ARCNetScript-Linux-x86_64.AppImage || true
-        
-    - name: Create portable tarball
+    - name: Rename AppImage
       run: |
-        mkdir -p portable/ARCNetScript
-        cp build/ARCNetScript portable/ARCNetScript/
-        cp -r $Qt6_DIR/lib/*.so* portable/ARCNetScript/ 2>/dev/null || true
+        if [ -f Amateur_Radio_Net_Script*.AppImage ]; then
+          mv Amateur_Radio_Net_Script*.AppImage ARCNetScript-linux-x86_64.AppImage
+        else
+          mv *.AppImage ARCNetScript-linux-x86_64.AppImage 2>/dev/null || true
+        fi
         
-        cd portable
-        tar -czf ARCNetScript-Linux-x86_64-portable.tar.gz ARCNetScript
-        cd ..
-        mv portable/ARCNetScript-Linux-x86_64-portable.tar.gz .
-        
-    - name: Upload artifacts
+    - name: Upload Linux artifact
       uses: actions/upload-artifact@v4
       with:
         name: linux-build
         path: |
-          ARCNetScript-Linux-x86_64.AppImage
-          ARCNetScript-Linux-x86_64-portable.tar.gz
-          build/ARCNetScript
+          ARCNetScript-linux-x86_64.AppImage
+          build/net-script
 
   build-windows:
-    runs-on: windows-2022
+    runs-on: windows-latest
     
     steps:
     - name: Checkout code
@@ -109,135 +106,70 @@ jobs:
         host: 'windows'
         target: 'desktop'
         arch: 'win64_msvc2019_64'
-        cache: true
+        modules: 'qtbase qttools'
         
     - name: Setup MSVC
-      uses: ilammy/msvc-dev-cmd@v1
-      with:
-        arch: x64
+      uses: microsoft/setup-msbuild@v1.3
+      
+    - name: Configure environment
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
         
-    - name: Configure CMake
-      run: cmake -B build -DCMAKE_BUILD_TYPE=Release -G "NMake Makefiles"
+    - name: Create build directory
+      run: mkdir build
       
+    - name: Configure with qmake
+      working-directory: build
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+        qmake ..\net-script.pro
+        
     - name: Build
-      run: cmake --build build --config Release
-      
+      working-directory: build
+      shell: cmd
+      run: |
+        call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvars64.bat"
+        nmake
+        
     - name: Deploy Qt dependencies
-      shell: pwsh
+      working-directory: build
+      shell: cmd
       run: |
         mkdir deploy
-        Copy-Item build\ARCNetScript.exe deploy\
-        & "$env:Qt6_DIR\bin\windeployqt.exe" --release --no-translations --no-system-d3d-compiler --no-opengl-sw deploy\ARCNetScript.exe
+        copy release\net-script.exe deploy\
+        windeployqt --release --no-translations deploy\net-script.exe
         
-    - name: Create installer with NSIS (optional)
+    - name: Create portable package
+      working-directory: build
       shell: pwsh
       run: |
-        # Create a simple NSIS script
-        $nsisScript = @"
-        !include "MUI2.nsh"
+        Compress-Archive -Path deploy\* -DestinationPath ARCNetScript-windows-x64.zip
         
-        Name "ARC Net Script Generator"
-        OutFile "ARCNetScript-Setup.exe"
-        InstallDir "`$PROGRAMFILES64\ARCNetScript"
-        
-        !define MUI_ABORTWARNING
-        !insertmacro MUI_PAGE_DIRECTORY
-        !insertmacro MUI_PAGE_INSTFILES
-        !insertmacro MUI_LANGUAGE "English"
-        
-        Section "Install"
-          SetOutPath "`$INSTDIR"
-          File /r "deploy\*.*"
-          CreateShortcut "`$DESKTOP\ARC Net Script.lnk" "`$INSTDIR\ARCNetScript.exe"
-          CreateDirectory "`$SMPROGRAMS\ARCNetScript"
-          CreateShortcut "`$SMPROGRAMS\ARCNetScript\ARC Net Script.lnk" "`$INSTDIR\ARCNetScript.exe"
-          WriteUninstaller "`$INSTDIR\Uninstall.exe"
-        SectionEnd
-        
-        Section "Uninstall"
-          Delete "`$INSTDIR\*.*"
-          RMDir /r "`$INSTDIR"
-          Delete "`$DESKTOP\ARC Net Script.lnk"
-          Delete "`$SMPROGRAMS\ARCNetScript\*.*"
-          RMDir "`$SMPROGRAMS\ARCNetScript"
-        SectionEnd
-        "@
-        
-        Set-Content -Path "installer.nsi" -Value $nsisScript
-        
-    - name: Install NSIS
-      shell: pwsh
-      run: |
-        choco install nsis -y
-        
-    - name: Build installer
-      shell: pwsh
-      run: |
-        & "C:\Program Files (x86)\NSIS\makensis.exe" installer.nsi
-        
-    - name: Create portable ZIP
-      shell: pwsh
-      run: |
-        Compress-Archive -Path deploy\* -DestinationPath ARCNetScript-Windows-x64-portable.zip
-        
-    - name: Upload artifacts
+    - name: Upload Windows artifact
       uses: actions/upload-artifact@v4
       with:
         name: windows-build
-        path: |
-          ARCNetScript-Setup.exe
-          ARCNetScript-Windows-x64-portable.zip
+        path: build/ARCNetScript-windows-x64.zip
 
   create-release:
     needs: [build-linux, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
-    permissions:
-      contents: write
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
     - name: Download all artifacts
       uses: actions/download-artifact@v4
-      with:
-        path: artifacts
-        
-    - name: Display structure
-      run: ls -R artifacts/
       
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
         files: |
-          artifacts/linux-build/ARCNetScript-Linux-x86_64.AppImage
-          artifacts/linux-build/ARCNetScript-Linux-x86_64-portable.tar.gz
-          artifacts/windows-build/ARCNetScript-Setup.exe
-          artifacts/windows-build/ARCNetScript-Windows-x64-portable.zip
+          linux-build/ARCNetScript-linux-x86_64.AppImage
+          windows-build/ARCNetScript-windows-x64.zip
         draft: false
         prerelease: false
         generate_release_notes: true
-        body: |
-          ## Downloads
-          
-          ### Linux
-          - **AppImage**: Portable, runs on most Linux distributions
-          - **Portable tar.gz**: Extract and run
-          
-          ### Windows
-          - **Setup.exe**: Installer with shortcuts
-          - **Portable ZIP**: Extract and run, no installation needed
-          
-          ## Installation
-          
-          ### Linux AppImage
-          ```bash
-          chmod +x ARCNetScript-Linux-x86_64.AppImage
-          ./ARCNetScript-Linux-x86_64.AppImage
-          ```
-          
-          ### Windows
-          Run the setup executable or extract the portable ZIP.
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
