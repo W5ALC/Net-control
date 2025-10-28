@@ -28,7 +28,10 @@ jobs:
     - name: Install build dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y cmake build-essential libgl1-mesa-dev imagemagick
+        sudo apt-get install -y cmake build-essential libgl1-mesa-dev imagemagick \
+          libxcb-cursor0 libxcb-cursor-dev libxcb-icccm4 libxcb-image0 \
+          libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+          libxcb-xfixes0 libxcb-xinerama0 libxcb-xkb1 libxkbcommon-x11-0
         
     - name: Configure CMake
       run: cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -68,18 +71,30 @@ jobs:
         
         export QMAKE=$Qt6_DIR/bin/qmake
         export LD_LIBRARY_PATH=$Qt6_DIR/lib:$LD_LIBRARY_PATH
+        export QT_PLUGIN_PATH=$Qt6_DIR/plugins
         
+        # Run linuxdeploy with Qt plugin
         ./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt --output appimage
         
-        # Rename the AppImage with version tag if available
+        # Determine version
         if [ -n "${{ github.ref_name }}" ] && [[ "${{ github.ref_name }}" == v* ]]; then
           VERSION="${{ github.ref_name }}"
         else
           VERSION="dev"
         fi
         
-        if [ -f *.AppImage ]; then
-          mv *.AppImage ARCNetScript-${VERSION}-Linux-x86_64.AppImage
+        # Rename the AppImage
+        for file in *.AppImage; do
+          if [ -f "$file" ]; then
+            mv "$file" "ARCNetScript-${VERSION}-Linux-x86_64.AppImage"
+            break
+          fi
+        done
+        
+        # Verify AppImage was created
+        if [ ! -f "ARCNetScript-${VERSION}-Linux-x86_64.AppImage" ]; then
+          echo "ERROR: AppImage was not created successfully"
+          exit 1
         fi
         
     - name: Create portable tarball
