@@ -157,8 +157,7 @@ jobs:
         Copy-Item build\ARCNetScript.exe deploy\
         & "$env:Qt6_DIR\bin\windeployqt.exe" --release --no-translations --no-system-d3d-compiler --no-opengl-sw deploy\ARCNetScript.exe
         
-        # Copy Visual C++ Runtime DLLs
-        $vcRedistPath = "C:\Windows\System32"
+        # Find and copy Visual C++ Runtime DLLs
         $requiredDlls = @(
           "msvcp140.dll",
           "msvcp140_1.dll",
@@ -167,13 +166,25 @@ jobs:
           "vcruntime140_1.dll"
         )
         
+        $searchPaths = @(
+          "C:\Windows\System32",
+          "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC\*\x64\Microsoft.VC143.CRT",
+          "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Redist\MSVC\*\x64\Microsoft.VC142.CRT"
+        )
+        
         foreach ($dll in $requiredDlls) {
-          $sourcePath = Join-Path $vcRedistPath $dll
-          if (Test-Path $sourcePath) {
-            Copy-Item $sourcePath deploy\
-            Write-Host "Copied $dll"
-          } else {
-            Write-Host "Warning: $dll not found at $sourcePath"
+          $found = $false
+          foreach ($searchPath in $searchPaths) {
+            $matches = Get-ChildItem -Path $searchPath -Filter $dll -Recurse -ErrorAction SilentlyContinue
+            if ($matches) {
+              Copy-Item $matches[0].FullName deploy\
+              Write-Host "Copied $dll from $($matches[0].DirectoryName)"
+              $found = $true
+              break
+            }
+          }
+          if (-not $found) {
+            Write-Host "Warning: $dll not found"
           }
         }
         
