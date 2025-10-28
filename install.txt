@@ -1,0 +1,17 @@
+Step 1: Install Qt6
+On Ubuntu/Debian:
+sudo apt update
+sudo apt install qt6-base-dev qt6-base-dev-tools
+On Fedora:
+sudo dnf install qt6-qtbase-devel
+On Arch:
+sudo pacman -S qt6-base
+
+
+
+
+
+mkdir build
+cd build
+cmake ..
+make
